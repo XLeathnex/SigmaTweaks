@@ -1,0 +1,49 @@
+[package]
+name = "sigmatweaks"
+version = "1.0.0"
+description = "Windows 11 optimization, privacy and debloat tool"
+authors = ["XLeathnex"]
+license = "MIT"
+repository = "https://github.com/XLeathnex/SigmaTweaks"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "sigmatweaks_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+# The catalog, its validation rules and the registry value codec carry no
+# Windows dependency, so `cargo test` exercises them on any host. Everything
+# that actually touches Windows sits behind the target gate below, which also
+# keeps the Linux test run from needing Tauri's GTK/WebKit stack.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(windows)'.dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+tauri = { version = "2", features = [] }
+winreg = "0.56"
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+# Cargo matches platform-specific build-dependencies against the host, not the
+# target, so this cannot be gated: a Linux host cross-checking the Windows
+# build still has to compile the build script. build.rs looks at
+# CARGO_CFG_TARGET_OS and only generates the Tauri context for Windows.
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

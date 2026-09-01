@@ -1,14 +1,20 @@
-# SigmaTweaks writes logs, backups and exported profiles to
-# %LOCALAPPDATA%\SigmaTweaks, but keep these patterns in case anything is
-# generated inside the working copy.
+# Build output
+/dist/
+/src-tauri/target/
+/src-tauri/gen/
+
+# Dependencies
+/node_modules/
+
+# SigmaTweaks writes logs, backups and profiles to %LOCALAPPDATA%\SigmaTweaks,
+# but keep these in case anything is generated inside the working copy.
 *.log
-backups/
-profiles/
-*.user.json
+/backups/
+/profiles/
 
 # Editors and OS clutter
 .vs/
 .vscode/
-*.suo
+.idea/
 Thumbs.db
 desktop.ini

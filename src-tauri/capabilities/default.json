@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/windows-schema.json",
+  "identifier": "default",
+  "description": "SigmaTweaks does all of its work through its own commands, so the webview needs no filesystem, shell or HTTP permissions of its own.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:default"
+  ]
+}

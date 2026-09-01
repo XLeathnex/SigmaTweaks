@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SigmaTweaks</title>
+    <link rel="stylesheet" href="/ui/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="titlebar" data-tauri-drag-region>
+        <div class="brand">
+          <span class="mark">&Sigma;</span>
+          <span class="wordmark">
+            <strong>SigmaTweaks</strong>
+            <em id="subtitle">Windows 11 optimization</em>
+          </span>
+        </div>
+        <div class="host" id="host-summary"></div>
+        <div class="badges" id="admin-badge"></div>
+      </header>
+
+      <div class="body">
+        <nav class="sidebar"><ul id="nav"></ul></nav>
+
+        <main class="content">
+          <div class="toolbar">
+            <input id="search" type="search" placeholder="Filter by name, description or id" spellcheck="false" />
+            <button id="select-all" class="ghost">Select all</button>
+            <button id="select-none" class="ghost">Clear</button>
+            <button id="refresh" class="ghost">Refresh state</button>
+          </div>
+          <div class="scroll" id="view"></div>
+        </main>
+      </div>
+
+      <footer class="actionbar">
+        <label class="field">
+          <span>Preset</span>
+          <select id="preset"></select>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="restore-point" checked />
+          <span>Create restore point first</span>
+        </label>
+        <span class="spacer"></span>
+        <span id="selection-count" class="muted">Nothing selected</span>
+        <button id="revert" class="ghost" disabled>Revert selected</button>
+        <button id="apply" class="primary" disabled>Apply selected</button>
+      </footer>
+
+      <section class="logpane" id="logpane">
+        <button class="loghead" id="log-toggle" aria-expanded="false">
+          <span class="chev">&rsaquo;</span> Activity log
+        </button>
+        <pre id="log" hidden></pre>
+      </section>
+    </div>
+
+    <div class="overlay" id="busy" hidden>
+      <div class="spinner"></div>
+      <p id="busy-text">Working...</p>
+      <small>Do not close this window</small>
+    </div>
+
+    <dialog id="confirm">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-body"></p>
+      <div class="dialog-actions">
+        <button value="cancel" class="ghost" id="confirm-no">Cancel</button>
+        <button value="ok" class="primary" id="confirm-yes">Continue</button>
+      </div>
+    </dialog>
+
+    <script type="module" src="/ui/main.ts"></script>
+  </body>
+</html>

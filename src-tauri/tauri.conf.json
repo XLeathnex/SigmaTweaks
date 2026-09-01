@@ -1,0 +1,50 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "SigmaTweaks",
+  "version": "1.0.0",
+  "identifier": "dev.xleathnex.sigmatweaks",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5183",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "SigmaTweaks",
+        "width": 1180,
+        "height": 780,
+        "minWidth": 960,
+        "minHeight": 600,
+        "resizable": true,
+        "center": true,
+        "decorations": true,
+        "theme": "Dark",
+        "backgroundColor": "#0E1013"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "shortDescription": "Windows 11 optimization and debloat",
+    "longDescription": "SigmaTweaks applies reversible Windows 11 performance, privacy and debloat settings. Every change is recorded before it is made, and nothing here disables Defender, SmartScreen, UAC or the firewall.",
+    "copyright": "Copyright (c) 2026 XLeathnex",
+    "category": "Utility",
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine"
+      }
+    }
+  }
+}

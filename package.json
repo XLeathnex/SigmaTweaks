@@ -1,0 +1,24 @@
+{
+  "name": "sigmatweaks",
+  "version": "1.0.0",
+  "description": "Windows 11 optimization, privacy and debloat tool",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "start": "tauri dev",
+    "bundle": "tauri build"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.9.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.7"
+  }
+}
