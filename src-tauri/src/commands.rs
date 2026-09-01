@@ -51,6 +51,15 @@ pub fn get_system_info() -> Result<SystemInfo> {
     sysinfo::collect()
 }
 
+/// Builds the package and scheduled-task snapshots ahead of the first scan, so
+/// the user is not waiting on them when the window opens.
+#[tauri::command]
+pub async fn warm_inventory() -> Result<()> {
+    tauri::async_runtime::spawn_blocking(crate::inventory::warm)
+        .await
+        .map_err(|err| Error::new(format!("inventory scan did not finish: {err}")))?
+}
+
 #[tauri::command]
 pub fn get_catalog() -> CatalogPayload {
     CatalogPayload {
@@ -63,8 +72,11 @@ pub fn get_catalog() -> CatalogPayload {
 
 /// Current state for the given ids, or the whole catalog when none are given.
 ///
-/// Reading state costs process launches for services, tasks and Store apps, so
-/// the UI asks for one category at a time rather than all 96 at once.
+/// Scanning everything is the normal case: the most useful thing this app can
+/// report is what was already done to the machine before it arrived, and that
+/// only reads well if every category shows its count at once. Store packages
+/// and scheduled tasks come from a cached snapshot ([`crate::inventory`]) so
+/// the whole catalog costs two process launches rather than one per item.
 #[tauri::command]
 pub async fn get_states(ids: Option<Vec<String>>) -> Result<Vec<TweakStatus>> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -82,12 +94,10 @@ pub async fn get_states(ids: Option<Vec<String>>) -> Result<Vec<TweakStatus>> {
                         id: tweak.id.clone(),
                         state: State::NotApplicable,
                         reason: Some(reason),
+                        matched: 0,
+                        total: 0,
                     },
-                    None => TweakStatus {
-                        id: tweak.id.clone(),
-                        state: engine::state(tweak),
-                        reason: None,
-                    },
+                    None => engine::inspect(tweak),
                 },
             )
             .collect()
@@ -202,6 +212,10 @@ pub async fn run_batch(
 
             results.push(result);
         }
+
+        // Packages and tasks may have changed, so the next scan must re-read
+        // them rather than trusting the snapshot taken before this batch.
+        crate::inventory::invalidate();
 
         if restart_explorer {
             log(&app, "info", "Restarting Explorer...");

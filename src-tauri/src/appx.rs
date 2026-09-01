@@ -27,33 +27,6 @@ fn validate(package: &str) -> Result<()> {
     Ok(())
 }
 
-/// Whether the package is installed for this user or still provisioned for new
-/// ones. A package can be either, both or neither.
-pub fn state(package: &str) -> Result<(bool, bool)> {
-    validate(package)?;
-
-    let script = format!(
-        "$ErrorActionPreference='SilentlyContinue';\
-         $installed = @(Get-AppxPackage -Name '{package}').Count;\
-         $provisioned = @(Get-AppxProvisionedPackage -Online | Where-Object {{ $_.DisplayName -like '{package}' }}).Count;\
-         Write-Output \"$installed $provisioned\""
-    );
-
-    let result = process::powershell(&script)?;
-    let text = result.stdout.trim().to_string();
-    let mut parts = text.split_whitespace();
-    let installed = parts
-        .next()
-        .and_then(|n| n.parse::<u32>().ok())
-        .unwrap_or(0);
-    let provisioned = parts
-        .next()
-        .and_then(|n| n.parse::<u32>().ok())
-        .unwrap_or(0);
-
-    Ok((installed > 0, provisioned > 0))
-}
-
 /// Removes a package for the current user and de-provisions it so it does not
 /// come back for newly created accounts.
 ///

@@ -25,10 +25,16 @@
 
         <main class="content">
           <div class="toolbar">
-            <input id="search" type="search" placeholder="Filter by name, description or id" spellcheck="false" />
-            <button id="select-all" class="ghost">Select all</button>
-            <button id="select-none" class="ghost">Clear</button>
-            <button id="refresh" class="ghost">Refresh state</button>
+            <input id="search" type="search" placeholder="Search tweaks" spellcheck="false" />
+            <div class="chips" id="filters" role="group" aria-label="Filter by state">
+              <button data-filter="all" aria-pressed="true">All</button>
+              <button data-filter="off" aria-pressed="false">Not applied</button>
+              <button data-filter="on" aria-pressed="false">Already applied</button>
+              <button data-filter="recommended" aria-pressed="false">Recommended</button>
+            </div>
+            <span class="grow"></span>
+            <button id="select-all" class="quiet">Select all</button>
+            <button id="refresh" class="quiet" title="Re-read the current state of every tweak">Rescan</button>
           </div>
           <div class="scroll" id="view"></div>
         </main>
@@ -45,6 +51,7 @@
         </label>
         <span class="spacer"></span>
         <span id="selection-count" class="muted">Nothing selected</span>
+        <button id="select-none" class="quiet" hidden>Clear</button>
         <button id="revert" class="ghost" disabled>Revert selected</button>
         <button id="apply" class="primary" disabled>Apply selected</button>
       </footer>

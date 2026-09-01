@@ -15,6 +15,7 @@ const PRESETS_JSON: &str = include_str!("../resources/presets.json");
 const CATEGORY_ORDER: &[&str] = &[
     "Performance",
     "Gaming",
+    "Productivity",
     "Privacy",
     "Network",
     "Explorer",
@@ -118,7 +119,7 @@ pub fn not_applicable_reason(tweak: &Tweak, facts: &HostFacts) -> Option<String>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Action;
+    use crate::model::{Action, Risk};
     use std::collections::HashSet;
 
     #[test]
@@ -233,6 +234,91 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn accepted_values_never_repeat_the_value_we_write() {
+        // An `accepts` entry equal to `value` is dead weight: the primary
+        // comparison already covers it, and it hides a copy-paste slip.
+        for tweak in tweaks() {
+            for action in &tweak.actions {
+                if let Action::Registry {
+                    name,
+                    value,
+                    accepts,
+                    ..
+                } = action
+                {
+                    for candidate in accepts {
+                        assert_ne!(
+                            Some(candidate),
+                            value.as_ref(),
+                            "{}: accepts repeats the written value for {name}",
+                            tweak.id
+                        );
+                    }
+                }
+                if let Action::Service {
+                    name,
+                    startup,
+                    accepts,
+                    ..
+                } = action
+                {
+                    assert!(
+                        !accepts.contains(startup),
+                        "{}: accepts repeats the written startup type for {name}",
+                        tweak.id
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn accepted_values_never_match_the_stock_default() {
+        // Accepting the Windows default would report every untouched machine
+        // as already tweaked, which is the exact failure this feature exists
+        // to avoid on the other side.
+        for tweak in tweaks() {
+            for action in &tweak.actions {
+                if let Action::Registry {
+                    name,
+                    default,
+                    accepts,
+                    ..
+                } = action
+                {
+                    for candidate in accepts {
+                        assert_ne!(
+                            Some(candidate),
+                            default.as_ref(),
+                            "{}: accepts includes the stock default for {name}",
+                            tweak.id
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hvci_is_the_only_security_tradeoff_and_is_opt_in() {
+        // SigmaTweaks ships exactly one setting that lowers a security
+        // boundary. It is deliberate, it is High risk, and it must never be
+        // reachable by accepting a preset.
+        const HVCI: &str = "gaming.memoryintegrity";
+
+        let tweak = by_id(HVCI).expect("the HVCI tweak exists");
+        assert_eq!(tweak.risk, Risk::High, "{HVCI} must be High risk");
+
+        for preset in presets() {
+            assert!(
+                !preset.tweaks.contains(&HVCI.to_string()),
+                "{HVCI} must not be in preset {}",
+                preset.key
+            );
         }
     }
 

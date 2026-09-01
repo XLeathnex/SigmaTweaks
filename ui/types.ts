@@ -53,7 +53,12 @@ export interface CatalogPayload {
 export interface TweakStatus {
   id: string;
   state: State;
+  /** Why the tweak is not applicable here, when it is not. */
   reason: string | null;
+  /** How many of the tweak's checkable changes are already in place… */
+  matched: number;
+  /** …out of how many there are. Renders as "3 of 4 already set". */
+  total: number;
 }
 
 export interface SystemInfo {

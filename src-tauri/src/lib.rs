@@ -20,6 +20,7 @@ pub mod catalog;
 pub mod codec;
 pub mod error;
 pub mod model;
+pub mod parse;
 pub mod protected;
 
 #[cfg(windows)]
@@ -34,6 +35,8 @@ pub mod custom;
 pub mod elevate;
 #[cfg(windows)]
 pub mod engine;
+#[cfg(windows)]
+pub mod inventory;
 #[cfg(windows)]
 pub mod maintenance;
 #[cfg(windows)]
@@ -51,6 +54,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_system_info,
             commands::get_catalog,
+            commands::warm_inventory,
             commands::get_states,
             commands::run_batch,
             commands::run_maintenance,

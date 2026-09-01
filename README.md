@@ -1,27 +1,51 @@
 # SigmaTweaks
 
 A Windows 11 optimization, privacy and debloat tool. Rust backend, Tauri
-desktop shell, 96 tweaks and 13 maintenance actions — and every setting it
+desktop shell, 119 tweaks and 13 maintenance actions — and every setting it
 changes is recorded first, so you can put it back.
+
+It scans the machine on startup and tells you what is **already** done, whether
+you did it here, with another tool, or by hand.
 
 ## What it does
 
 | Category | Tweaks | Examples |
 | --- | --- | --- |
 | Performance | 14 | Visual effects, foreground priority, Prefetch and SysMain on SSDs, Fast Startup, hibernation, reserved storage |
-| Gaming | 8 | Game DVR off, fullscreen optimizations off, GPU scheduling, MMCSS priorities, mouse acceleration off |
+| Gaming | 11 | System-wide timer resolution, windowed-game optimizations, Game DVR off, fullscreen optimizations off, GPU scheduling, MMCSS priorities, mouse acceleration off |
+| Productivity | 10 | Clipboard history, long paths, symlinks without admin, a predictable Alt+Tab, no Sticky Keys prompt, no suggestion toasts |
 | Privacy | 15 | Telemetry, advertising ID, activity history, Start menu ads, Cortana, web search, Recall, error reporting |
 | Network | 4 | Nagle's algorithm, LLMNR, NetBIOS, Cloudflare DNS |
 | Explorer | 16 | File extensions, the old right-click menu, taskbar layout, Widgets, Chat, dark mode |
 | Services | 11 | Remote Registry, Print Spooler, Windows Search, Delivery Optimization |
 | Updates | 5 | No forced restarts, no drivers through Windows Update, no update peer-sharing |
 | Power | 4 | Ultimate Performance plan, USB selective suspend, sleep timers |
-| Debloat | 19 | News, Weather, Solitaire, the Office stub, Clipchamp, consumer Teams, Xbox apps |
+| Debloat | 29 | News, Weather, Solitaire, the Office stub, Clipchamp, consumer Teams, Xbox apps, new Outlook, Dev Home, Widgets, OEM promo stubs |
 
 Plus maintenance jobs that are not settings: temp cleanup, Windows Update
 cache, icon cache rebuild, DNS flush, network stack reset, SFC, DISM, TRIM.
 
 The full list is in [docs/TWEAKS.md](docs/TWEAKS.md).
+
+## Detecting what is already done
+
+A tweaking tool that cannot see the current state is guesswork, so detection is
+treated as a first-class feature rather than a status icon:
+
+- **The whole catalog is scanned on startup**, and the sidebar shows `applied /
+  total` per category. Store packages and scheduled tasks come from two cached
+  snapshots, so 119 tweaks cost two process launches rather than one per item.
+- **Equivalent values count.** Other tools and the Windows UI often reach the
+  same end state through a different number. `Win32PrioritySeparation` is
+  `0x26` here, but `0x28` and `0x2A` are equally short-quantum; telemetry set
+  to Basic in Settings lands on `1` where the policy writes `0`. Each of those
+  reads as *applied* rather than *off*. Those values are recognised, never
+  written, and a test rejects an "equivalent" that is really the stock default.
+- **Partial is explained.** A tweak that sets four values and finds three shows
+  "3 of 4 already set" rather than an unlabelled amber pill.
+- **Filters**: All, Not applied, Already applied, Recommended.
+- **Presets skip what is done.** Picking one selects only what is actually
+  missing and says so: *"Preset Productivity: 19 selected, 4 already applied."*
 
 ## What it deliberately will not do
 
@@ -39,6 +63,15 @@ placebo. SigmaTweaks has none of these, and will not be adding them:
   the Store itself depend on. Both lists live in `src-tauri/src/protected.rs`
   and are enforced at runtime *and* asserted against the catalog in tests.
 - It does not download or run anything from the internet.
+
+There is exactly **one** setting that lowers a security boundary, and it is
+deliberate: `gaming.memoryintegrity` turns off hypervisor-enforced code
+integrity (HVCI), which is worth roughly 5-10% of your frame rate and is the
+mitigation that stops a vulnerable signed driver being used to load unsigned
+kernel code. Microsoft leaves it off on most upgrade installs, so this returns
+the machine to that state rather than below it. It is High risk, it says all of
+this in its own description, and a test keeps it out of every preset — you have
+to tick it yourself.
 
 ## Requirements
 
@@ -65,9 +98,11 @@ host.
 
 ## Using it
 
-- Pick a category on the left. Each tweak shows its risk and whether it is
-  currently **applied**, **off**, **partial** (some of its values are set) or
-  **N/A** (it does not apply to this machine — Windows 10, or a hard disk).
+- Pick a category on the left. The `n/total` beside each one is how much of it
+  is already in place. Each tweak shows **Applied**, **Partial** (with a count),
+  **N/A** (does not apply here) or nothing at all when it is simply off — the
+  common case is shown by absence rather than by a badge on every row.
+- Low risk is likewise unmarked; only Medium and High say so.
 - Tick what you want and press **Apply selected**. **Revert selected** writes
   the stock Windows values back.
 - Selection is global, not per-page: a preset ticks everything it covers across
@@ -80,12 +115,13 @@ host.
 
 | Key | Tweaks | What it is for |
 | --- | --- | --- |
-| `recommended` | 36 | The safe default: reversible settings only, no apps removed |
-| `performance` | 31 | Adds the settings that trade features or power draw for speed |
+| `recommended` | 42 | The safe default: reversible settings only, no apps removed |
+| `performance` | 33 | Adds the settings that trade features or power draw for speed |
+| `productivity` | 23 | Friction removal: clipboard history, long paths, a predictable shell |
 | `privacy` | 20 | Every telemetry and tracking setting SigmaTweaks knows about |
-| `gaming` | 21 | Latency and frame-time work, plus a power plan that stops parking cores |
-| `laptop` | 30 | Recommended, minus everything that costs battery life |
-| `debloat` | 14 | Removes the pre-installed Store apps most people never open |
+| `gaming` | 24 | Timer resolution, frame pacing, capture off, a plan that stops parking cores |
+| `laptop` | 34 | Recommended, minus everything that costs battery life |
+| `debloat` | 21 | Removes the pre-installed Store apps most people never open |
 
 Presets live in `src-tauri/resources/presets.json` and are compiled into the
 binary. A test asserts that every id in every preset resolves, and that nothing
@@ -122,6 +158,8 @@ src-tauri/
     model.rs            the tweak schema
     catalog.rs          embedded catalog, id resolution, applicability rules
     codec.rs            registry value encoding, decoding, comparison
+    inventory.rs        cached package and scheduled-task snapshots
+    parse.rs            schtasks CSV and package-pattern parsing
     protected.rs        the services and packages that are never touched
     engine.rs           apply, revert and state detection
     registry.rs         winreg wrapper
@@ -161,6 +199,10 @@ value to revert to:
   ]
 }
 ```
+
+An action may also carry `accepts`: extra values that read as applied but are
+never written, which is how detection recognises the same change made by
+something else.
 
 Apply, revert and "is it on?" are three readings of that one list, so they
 cannot drift apart. `default` is a required field: a registry action that omits

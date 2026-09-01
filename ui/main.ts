@@ -1,9 +1,14 @@
 // SigmaTweaks interface.
 //
 // The backend owns every decision that touches Windows; this file is a view
-// over the catalog it serves plus a selection set. Selection is global rather
-// than per-page, so a preset can be ticked once and applied in a single batch
-// across categories.
+// over the catalog plus a selection set.
+//
+// Two things shape the design. The whole catalog is scanned once at startup
+// rather than a category at a time, because the most useful thing this app can
+// tell you is what was already done to the machine before it arrived - and
+// that only reads as an answer if every category shows its count at once.
+// Selection is global rather than per-page, so a preset is ticked once and
+// applied in a single batch.
 
 import * as api from './api';
 import type {
@@ -22,6 +27,8 @@ const OVERVIEW = 'Overview';
 const MAINTENANCE = 'Maintenance';
 const BACKUPS = 'Backups';
 
+type Filter = 'all' | 'off' | 'on' | 'recommended';
+
 function el<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
   if (!node) throw new Error(`missing element #${id}`);
@@ -32,6 +39,7 @@ const dom = {
   nav: el<HTMLUListElement>('nav'),
   view: el<HTMLDivElement>('view'),
   search: el<HTMLInputElement>('search'),
+  filters: el<HTMLDivElement>('filters'),
   selectAll: el<HTMLButtonElement>('select-all'),
   selectNone: el<HTMLButtonElement>('select-none'),
   refresh: el<HTMLButtonElement>('refresh'),
@@ -61,25 +69,18 @@ interface AppState {
   statuses: Map<string, TweakStatus>;
   selected: Set<string>;
   search: string;
+  filter: Filter;
 }
 
 let state: AppState;
 
-/* ------------------------------------------------------------------ utils */
+/* ------------------------------------------------------------------- utils */
 
 function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string,
   );
 }
-
-const STATE_LABEL: Record<State, string> = {
-  applied: 'APPLIED',
-  not_applied: 'OFF',
-  partial: 'PARTIAL',
-  unknown: 'UNKNOWN',
-  not_applicable: 'N/A',
-};
 
 function appendLog(line: LogLine): void {
   const row = document.createElement('div');
@@ -94,7 +95,6 @@ function showLog(): void {
   dom.logToggle.setAttribute('aria-expanded', 'true');
 }
 
-/** Runs work behind the busy overlay, so a slow batch cannot be double-fired. */
 async function busy<T>(text: string, work: () => Promise<T>): Promise<T> {
   dom.busyText.textContent = text;
   dom.busy.hidden = false;
@@ -122,13 +122,45 @@ function confirmAction(title: string, body: string, okLabel = 'Continue'): Promi
   });
 }
 
+/* ---------------------------------------------------------------- selectors */
+
+const isCategory = (name: string) => state.catalog.categories.includes(name);
+
 function tweaksIn(category: string): Tweak[] {
   return state.catalog.tweaks.filter((tweak) => tweak.category === category);
+}
+
+/** How many tweaks in a category are already applied, ignoring inapplicable ones. */
+function tally(category: string): { applied: number; total: number } {
+  let applied = 0;
+  let total = 0;
+  for (const tweak of tweaksIn(category)) {
+    const status = state.statuses.get(tweak.id);
+    if (status?.state === 'not_applicable') continue;
+    total += 1;
+    if (status?.state === 'applied') applied += 1;
+  }
+  return { applied, total };
+}
+
+function passesFilter(tweak: Tweak): boolean {
+  const status = state.statuses.get(tweak.id)?.state;
+  switch (state.filter) {
+    case 'off':
+      return status !== 'applied' && status !== 'not_applicable';
+    case 'on':
+      return status === 'applied' || status === 'partial';
+    case 'recommended':
+      return tweak.recommended;
+    default:
+      return true;
+  }
 }
 
 function visibleTweaks(): Tweak[] {
   const needle = state.search.trim().toLowerCase();
   return tweaksIn(state.view).filter((tweak) => {
+    if (!passesFilter(tweak)) return false;
     if (!needle) return true;
     return (
       tweak.name.toLowerCase().includes(needle) ||
@@ -138,11 +170,10 @@ function visibleTweaks(): Tweak[] {
   });
 }
 
-function isSelectable(tweak: Tweak): boolean {
-  return state.statuses.get(tweak.id)?.state !== 'not_applicable';
-}
+const isSelectable = (tweak: Tweak) =>
+  state.statuses.get(tweak.id)?.state !== 'not_applicable';
 
-/* ----------------------------------------------------------------- render */
+/* ------------------------------------------------------------------ render */
 
 function renderNav(): void {
   const entries = [OVERVIEW, ...state.catalog.categories, MAINTENANCE, BACKUPS];
@@ -158,11 +189,12 @@ function renderNav(): void {
       label.textContent = name;
       item.appendChild(label);
 
-      const count = tweaksIn(name).length;
-      if (count > 0) {
+      if (isCategory(name)) {
+        const { applied, total } = tally(name);
         const badge = document.createElement('span');
-        badge.className = 'count';
-        badge.textContent = String(count);
+        badge.className = applied === total && total > 0 ? 'tally complete' : 'tally';
+        badge.textContent = `${applied}/${total}`;
+        badge.title = `${applied} of ${total} already applied`;
         item.appendChild(badge);
       }
       return item;
@@ -170,80 +202,128 @@ function renderNav(): void {
   );
 }
 
-function cardMeta(tweak: Tweak, status: TweakStatus | undefined): string {
-  const notes: string[] = [tweak.id];
+/** The detail line under a tweak: only the things that are not the default. */
+function metaFor(tweak: Tweak, status: TweakStatus | undefined, skipOneWay: boolean): string {
+  const notes: string[] = [];
+
+  if (status?.state === 'partial' && status.total > 0) {
+    notes.push(`${status.matched} of ${status.total} already set`);
+  }
+  if (status?.reason) notes.push(status.reason);
+  if (tweak.irreversible && !skipOneWay) notes.push('cannot be undone');
   if (tweak.requires_restart) notes.push('needs a restart');
   if (tweak.restart_explorer) notes.push('restarts Explorer');
-  if (tweak.irreversible) notes.push('cannot be undone');
-  if (!tweak.requires_admin) notes.push('no admin needed');
-  if (status?.reason) notes.push(status.reason);
+
   return notes.join('  ·  ');
 }
 
-function renderTweakCards(tweaks: Tweak[]): string {
+const STATUS_TEXT: Partial<Record<State, string>> = {
+  applied: 'Applied',
+  partial: 'Partial',
+  unknown: 'Unknown',
+  not_applicable: 'N/A',
+};
+
+function renderRows(tweaks: Tweak[]): string {
+  // A note every row shares is noise: the section header already said it once.
+  // In Debloat that is "cannot be undone" on all 29 rows.
+  const allOneWay = tweaks.length > 1 && tweaks.every((tweak) => tweak.irreversible);
+
   return tweaks
     .map((tweak) => {
       const status = state.statuses.get(tweak.id);
       const tweakState: State = status?.state ?? 'unknown';
       const disabled = tweakState === 'not_applicable';
       const checked = state.selected.has(tweak.id);
+      const meta = metaFor(tweak, status, allOneWay);
+
+      // Low risk is the common case and says nothing worth the ink.
+      const risk =
+        tweak.risk === 'low' ? '' : `<span class="risk ${tweak.risk}">${tweak.risk.toUpperCase()}</span>`;
+      const statusText = STATUS_TEXT[tweakState] ?? '';
+
+      const classes = ['row'];
+      if (disabled) classes.push('disabled');
+      if (checked) classes.push('on');
 
       return `
-        <article class="card${disabled ? ' disabled' : ''}">
+        <div class="${classes.join(' ')}" title="${escapeHtml(tweak.id)}">
           <input type="checkbox" data-id="${escapeHtml(tweak.id)}"
                  ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}
                  aria-label="${escapeHtml(tweak.name)}" />
           <div>
-            <h3>${escapeHtml(tweak.name)}</h3>
+            <h3>${escapeHtml(tweak.name)}${risk}</h3>
             <p>${escapeHtml(tweak.description)}</p>
-            <div class="meta">${escapeHtml(cardMeta(tweak, status))}</div>
+            ${meta ? `<div class="meta">${escapeHtml(meta)}</div>` : ''}
           </div>
-          <div class="pills">
-            <span class="pill ${tweak.risk}">${tweak.risk.toUpperCase()}</span>
-            <span class="pill ${tweakState}">${STATE_LABEL[tweakState]}</span>
-          </div>
-        </article>`;
+          <div class="status ${tweakState}">${statusText}</div>
+        </div>`;
     })
     .join('');
 }
 
 const CATEGORY_NOTE: Record<string, string> = {
-  Debloat:
-    'Removing a Store app cannot be undone from here. Anything you want back has to come from the Microsoft Store.',
-  Services:
-    'Services Windows needs to boot, sign you in, network or stay patched are on a protected list and cannot be changed by SigmaTweaks.',
-  Updates:
-    'These change when and how updates arrive. SigmaTweaks will not switch Windows Update off.',
-  Privacy:
-    'Nothing in this category touches Defender, SmartScreen, UAC or the firewall.',
+  Performance: 'Responsiveness and resource usage. Anything that trades battery life or a feature for speed says so.',
+  Gaming: 'Frame pacing, input latency and capture overhead. The scheduling and timer settings matter more than the frame-rate counters suggest.',
+  Productivity: 'Friction removal for daily use. Nothing here changes how the machine performs, only how much it gets in your way.',
+  Privacy: 'Telemetry, tracking and advertising. Nothing in this category touches Defender, SmartScreen, UAC or the firewall.',
+  Network: 'Name resolution and TCP behaviour.',
+  Explorer: 'The shell: File Explorer, the taskbar and the context menu.',
+  Services: 'Services Windows needs to boot, sign you in, network or stay patched are on a protected list and cannot be changed from here.',
+  Updates: 'When and how updates arrive. SigmaTweaks will not switch Windows Update off.',
+  Power: 'Power schemes and sleep behaviour.',
+  Debloat: 'Removing a Store app cannot be undone from here — anything you want back has to come from the Microsoft Store.',
 };
 
 function renderCategory(): void {
   const tweaks = visibleTweaks();
-  const note =
-    CATEGORY_NOTE[state.view] ?? `${tweaks.length} tweak${tweaks.length === 1 ? '' : 's'} in this category.`;
+  const { applied, total } = tally(state.view);
+  const note = CATEGORY_NOTE[state.view] ?? '';
+
+  const summary =
+    total === 0
+      ? ''
+      : applied === total
+        ? `All ${total} already applied on this machine.`
+        : `${applied} of ${total} already applied on this machine.`;
 
   const body = tweaks.length
-    ? renderTweakCards(tweaks)
+    ? `<div class="rows">${renderRows(tweaks)}</div>`
     : `<p class="empty">${
-        state.search ? `Nothing in ${escapeHtml(state.view)} matches “${escapeHtml(state.search)}”.` : 'No tweaks here.'
+        state.search || state.filter !== 'all'
+          ? 'Nothing here matches the current filter.'
+          : 'No tweaks in this category.'
       }</p>`;
 
   dom.view.innerHTML = `
-    <h2 class="section-title">${escapeHtml(state.view)}</h2>
-    <p class="section-note">${escapeHtml(note)}</p>
+    <div class="section">
+      <h2>${escapeHtml(state.view)}</h2>
+      ${note ? `<p>${escapeHtml(note)}</p>` : ''}
+      ${summary ? `<p class="summary">${escapeHtml(summary)}</p>` : ''}
+    </div>
     ${body}`;
 }
 
 function renderOverview(): void {
   const info = state.info;
+  let applied = 0;
+  let total = 0;
+  for (const category of state.catalog.categories) {
+    const counts = tally(category);
+    applied += counts.applied;
+    total += counts.total;
+  }
+
   const drive = `${info.system_drive} — ${info.free_space_gb} GB free${
     info.is_ssd === null ? '' : info.is_ssd ? ' (SSD)' : ' (HDD)'
   }`;
+  // ProductName already carries the edition ("Windows 11 Pro"), so appending
+  // EditionID as well reads as "Windows 11 Pro Professional".
+  const version = [info.os_name, info.display_version].filter(Boolean).join(' ');
 
   const facts: [string, string][] = [
     ['Computer', info.computer_name],
-    ['Windows', `${info.os_name} ${info.edition} ${info.display_version} (build ${info.build})`],
+    ['Windows', `${version} (build ${info.build})`],
     ['Processor', `${info.cpu} — ${info.logical_processors} threads`],
     ['Memory', `${info.memory_gb} GB`],
     ['Graphics', info.gpu],
@@ -252,70 +332,77 @@ function renderOverview(): void {
   ];
 
   dom.view.innerHTML = `
-    <h2 class="section-title">Overview</h2>
-    <p class="section-note">Pick a category on the left, tick what you want and press Apply. Selection carries across
-      categories, so a preset can be applied in one batch. Every change is recorded first and can be reverted.</p>
+    <div class="section">
+      <h2>Overview</h2>
+      <p>SigmaTweaks scanned this machine on startup, so the counts below reflect what is already
+         in place — whether it was set here, by another tool, or by hand.</p>
+    </div>
+    <div class="stats">
+      <div class="stat accent"><b>${applied}</b><span>already applied</span></div>
+      <div class="stat"><b>${total - applied}</b><span>available to apply</span></div>
+      <div class="stat"><b>${state.catalog.tweaks.length}</b><span>tweaks in the catalog</span></div>
+      <div class="stat"><b>${state.catalog.actions.length}</b><span>maintenance actions</span></div>
+    </div>
     <dl class="facts">
       ${facts.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}
     </dl>
-    <p class="section-note">${state.catalog.tweaks.length} tweaks across ${state.catalog.categories.length}
-      categories, plus ${state.catalog.actions.length} maintenance actions. SigmaTweaks ${escapeHtml(info.app_version)}.</p>
-    <div class="pills">
-      <button id="export-profile" class="ghost">Export applied tweaks as a profile</button>
-      <button id="open-data" class="ghost">Open data folder</button>
+    <div class="actions-row">
+      <button id="export-profile" class="quiet">Export applied tweaks as a profile</button>
+      <button id="open-data" class="quiet">Open data folder</button>
     </div>`;
 }
 
 function renderMaintenance(): void {
-  const cards = state.catalog.actions
+  const rows = state.catalog.actions
     .map(
       (action: MaintenanceAction) => `
-      <article class="card">
+      <div class="row" title="${escapeHtml(action.id)}">
         <span></span>
         <div>
           <h3>${escapeHtml(action.name)}</h3>
           <p>${escapeHtml(action.description)}</p>
-          <div class="meta">${escapeHtml(action.category)}  ·  ${escapeHtml(action.id)}</div>
+          <div class="meta">${escapeHtml(action.category)}</div>
         </div>
-        <div class="pills"><button data-action="${escapeHtml(action.id)}">Run</button></div>
-      </article>`,
+        <button data-action="${escapeHtml(action.id)}">Run</button>
+      </div>`,
     )
     .join('');
 
   dom.view.innerHTML = `
-    <h2 class="section-title">Maintenance</h2>
-    <p class="section-note">One-shot jobs rather than settings. These have no state and no revert, so read the
-      description before running the ones that ask for confirmation.</p>
-    ${cards}`;
+    <div class="section">
+      <h2>Maintenance</h2>
+      <p>One-shot jobs rather than settings. These have no state and no revert, so read the
+         description before running the ones that ask for confirmation.</p>
+    </div>
+    <div class="rows">${rows}</div>`;
 }
 
 function renderBackups(backups: BackupInfo[]): void {
-  const cards = backups.length
+  const rows = backups.length
     ? backups
         .map((backup) => {
-          let created = backup.created;
           const parsed = new Date(backup.created);
-          if (!Number.isNaN(parsed.getTime())) created = parsed.toLocaleString();
-
+          const created = Number.isNaN(parsed.getTime()) ? backup.created : parsed.toLocaleString();
           return `
-            <article class="card">
+            <div class="row" title="${escapeHtml(backup.file_name)}">
               <span></span>
               <div>
-                <h3>${escapeHtml(created)} (${escapeHtml(backup.label)})</h3>
-                <p>${backup.tweak_count} tweaks, ${backup.entry_count} recorded values</p>
-                <div class="meta">${escapeHtml(backup.file_name)}</div>
+                <h3>${escapeHtml(created)}</h3>
+                <p>${backup.tweak_count} tweaks, ${backup.entry_count} recorded values (${escapeHtml(backup.label)})</p>
               </div>
-              <div class="pills"><button data-restore="${escapeHtml(backup.path)}">Restore</button></div>
-            </article>`;
+              <button data-restore="${escapeHtml(backup.path)}">Restore</button>
+            </div>`;
         })
         .join('')
-    : '<p class="empty">No backups yet. One is written automatically the first time you apply something.</p>';
+    : '';
 
   dom.view.innerHTML = `
-    <h2 class="section-title">Backups</h2>
-    <p class="section-note">Every apply records the exact values it is about to change. Restoring a snapshot puts those
-      values back, whatever they were — which is more accurate than reverting to Windows defaults.</p>
-    ${cards}`;
+    <div class="section">
+      <h2>Backups</h2>
+      <p>Every apply records the exact values it is about to change. Restoring a snapshot puts those
+         values back, whatever they were — which is more accurate than reverting to Windows defaults.</p>
+    </div>
+    ${rows ? `<div class="rows">${rows}</div>` : '<p class="empty">No backups yet. One is written the first time you apply something.</p>'}`;
 }
 
 function updateSelectionUi(): void {
@@ -323,41 +410,39 @@ function updateSelectionUi(): void {
   dom.selectionCount.textContent = count === 0 ? 'Nothing selected' : `${count} selected`;
   dom.apply.disabled = count === 0;
   dom.revert.disabled = count === 0;
+  dom.selectNone.hidden = count === 0;
 }
 
-/** Loads state for the current category, then paints it. */
+function renderCurrentView(): void {
+  if (state.view === OVERVIEW) renderOverview();
+  else if (state.view === MAINTENANCE) renderMaintenance();
+  else renderCategory();
+}
+
 async function showView(name: string): Promise<void> {
   state.view = name;
   renderNav();
 
-  const isCategory = state.catalog.categories.includes(name);
-  dom.search.disabled = !isCategory;
-  dom.selectAll.disabled = !isCategory;
-  dom.refresh.disabled = !isCategory;
+  const category = isCategory(name);
+  dom.search.disabled = !category;
+  dom.filters.hidden = !category;
+  dom.selectAll.disabled = !category;
 
-  if (name === OVERVIEW) {
-    renderOverview();
-  } else if (name === MAINTENANCE) {
-    renderMaintenance();
-  } else if (name === BACKUPS) {
+  if (name === BACKUPS) {
     renderBackups(await busy('Reading backups...', api.listBackups));
   } else {
-    await refreshStates(name);
-    renderCategory();
+    renderCurrentView();
   }
 
   updateSelectionUi();
 }
 
-/** Reading state costs process launches, so only one category is read at a time. */
-async function refreshStates(category: string): Promise<void> {
-  const ids = tweaksIn(category).map((tweak) => tweak.id);
-  if (ids.length === 0) return;
+/** Re-reads the state of the whole catalog. Two process launches, not 120. */
+async function rescan(message = 'Scanning this machine...'): Promise<void> {
+  const statuses = await busy(message, () => api.getStates());
+  state.statuses = new Map(statuses.map((status) => [status.id, status]));
 
-  const statuses = await busy('Reading current state...', () => api.getStates(ids));
-  for (const status of statuses) state.statuses.set(status.id, status);
-
-  // A tweak that turns out not to apply here must not stay in the batch.
+  // A tweak that turns out not to apply here must not stay in a batch.
   for (const status of statuses) {
     if (status.state === 'not_applicable') state.selected.delete(status.id);
   }
@@ -366,16 +451,13 @@ async function refreshStates(category: string): Promise<void> {
 /* ----------------------------------------------------------------- actions */
 
 async function runBatch(mode: Mode): Promise<void> {
-  const ids = [...state.selected].filter((id) => {
-    const tweak = state.catalog.tweaks.find((candidate) => candidate.id === id);
-    return tweak !== undefined && isSelectable(tweak);
-  });
-  if (ids.length === 0) return;
+  const chosen = state.catalog.tweaks.filter(
+    (tweak) => state.selected.has(tweak.id) && isSelectable(tweak),
+  );
+  if (chosen.length === 0) return;
 
-  const chosen = state.catalog.tweaks.filter((tweak) => ids.includes(tweak.id));
   const oneWay = chosen.filter((tweak) => tweak.irreversible);
-
-  let body = `${mode === 'apply' ? 'Apply' : 'Revert'} ${ids.length} tweak${ids.length === 1 ? '' : 's'}?`;
+  let body = `${mode === 'apply' ? 'Apply' : 'Revert'} ${chosen.length} tweak${chosen.length === 1 ? '' : 's'}?`;
   if (mode === 'apply' && oneWay.length > 0) {
     const names = oneWay.slice(0, 6).map((tweak) => `  • ${tweak.name}`).join('\n');
     const more = oneWay.length > 6 ? `\n  …and ${oneWay.length - 6} more` : '';
@@ -386,16 +468,19 @@ async function runBatch(mode: Mode): Promise<void> {
 
   showLog();
   const outcome = await busy(`${mode === 'apply' ? 'Applying' : 'Reverting'}...`, () =>
-    api.runBatch(ids, mode, dom.restorePoint.checked),
+    api.runBatch(chosen.map((tweak) => tweak.id), mode, dom.restorePoint.checked),
   );
 
-  // Everything that succeeded leaves the batch; failures stay ticked so they
-  // can be retried once the reason is dealt with.
+  // Successes leave the batch; failures stay ticked so they can be retried
+  // once whatever blocked them is dealt with.
   for (const result of outcome.results) {
     if (result.success) state.selected.delete(result.id);
   }
 
-  await showView(state.view);
+  await rescan('Re-reading state...');
+  renderNav();
+  renderCurrentView();
+  updateSelectionUi();
 
   if (outcome.restart_required) {
     const restart = await confirmAction(
@@ -424,12 +509,9 @@ async function runMaintenance(id: string): Promise<void> {
 }
 
 async function restoreBackup(path: string): Promise<void> {
-  const ok = await confirmAction(
-    'Restore backup',
-    `Put back every value recorded in this backup?\n\n${path}`,
-    'Restore',
-  );
-  if (!ok) return;
+  if (!(await confirmAction('Restore backup', `Put back every value recorded in this backup?\n\n${path}`, 'Restore'))) {
+    return;
+  }
 
   showLog();
   try {
@@ -437,6 +519,7 @@ async function restoreBackup(path: string): Promise<void> {
   } catch (error) {
     appendLog({ level: 'error', message: api.describeError(error) });
   }
+  await rescan('Re-reading state...');
   await showView(BACKUPS);
 }
 
@@ -444,21 +527,29 @@ function applyPreset(key: string): void {
   const preset = state.catalog.presets.find((candidate) => candidate.key === key);
   if (!preset) return;
 
-  // Selecting across the whole catalog, not just this page: the batch runs in
-  // one go and the backend skips anything that does not apply here.
-  for (const id of preset.tweaks) state.selected.add(id);
+  // Selecting across the whole catalog rather than the current page: the batch
+  // runs in one go, and anything already applied is skipped as a no-op.
+  let added = 0;
+  let already = 0;
+  for (const id of preset.tweaks) {
+    if (state.statuses.get(id)?.state === 'applied') {
+      already += 1;
+      continue;
+    }
+    if (state.statuses.get(id)?.state === 'not_applicable') continue;
+    state.selected.add(id);
+    added += 1;
+  }
 
   appendLog({
     level: 'info',
-    message: `Preset “${preset.name}” selected ${preset.tweaks.length} tweaks. Review them, then press Apply.`,
+    message: `Preset “${preset.name}”: ${added} selected, ${already} already applied.`,
   });
-  showLog();
-
-  if (state.catalog.categories.includes(state.view)) renderCategory();
+  renderCurrentView();
   updateSelectionUi();
 }
 
-/* ------------------------------------------------------------------- wiring */
+/* ------------------------------------------------------------------ wiring */
 
 function wireEvents(): void {
   dom.nav.addEventListener('click', (event) => {
@@ -472,11 +563,13 @@ function wireEvents(): void {
 
     if (box.checked) state.selected.add(box.dataset.id);
     else state.selected.delete(box.dataset.id);
+    box.closest('.row')?.classList.toggle('on', box.checked);
     updateSelectionUi();
   });
 
   dom.view.addEventListener('click', (event) => {
     const target = event.target as HTMLElement;
+
     const action = target.closest<HTMLButtonElement>('[data-action]');
     if (action?.dataset.action) return void runMaintenance(action.dataset.action);
 
@@ -485,44 +578,56 @@ function wireEvents(): void {
 
     if (target.id === 'export-profile') {
       void busy('Reading current state...', api.exportProfile)
-        .then((path) => {
-          appendLog({ level: 'success', message: `Profile written to ${path}` });
-          showLog();
-        })
-        .catch((error) => appendLog({ level: 'error', message: api.describeError(error) }));
+        .then((path) => appendLog({ level: 'success', message: `Profile written to ${path}` }))
+        .catch((error) => appendLog({ level: 'error', message: api.describeError(error) }))
+        .finally(showLog);
     }
 
     if (target.id === 'open-data') {
       void api
         .openDataDirectory()
-        .then((path) => {
-          appendLog({ level: 'info', message: `Opened ${path}` });
-          showLog();
-        })
-        .catch((error) => appendLog({ level: 'error', message: api.describeError(error) }));
+        .then((path) => appendLog({ level: 'info', message: `Opened ${path}` }))
+        .catch((error) => appendLog({ level: 'error', message: api.describeError(error) }))
+        .finally(showLog);
     }
   });
 
   dom.search.addEventListener('input', () => {
     state.search = dom.search.value;
-    if (state.catalog.categories.includes(state.view)) renderCategory();
+    if (isCategory(state.view)) renderCategory();
+  });
+
+  dom.filters.addEventListener('click', (event) => {
+    const chip = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-filter]');
+    if (!chip?.dataset.filter) return;
+
+    state.filter = chip.dataset.filter as Filter;
+    for (const button of dom.filters.querySelectorAll('button')) {
+      button.setAttribute('aria-pressed', String(button === chip));
+    }
+    if (isCategory(state.view)) renderCategory();
   });
 
   dom.selectAll.addEventListener('click', () => {
     for (const tweak of visibleTweaks()) {
       if (isSelectable(tweak)) state.selected.add(tweak.id);
     }
-    renderCategory();
+    renderCurrentView();
     updateSelectionUi();
   });
 
   dom.selectNone.addEventListener('click', () => {
     state.selected.clear();
-    if (state.catalog.categories.includes(state.view)) renderCategory();
+    renderCurrentView();
     updateSelectionUi();
   });
 
-  dom.refresh.addEventListener('click', () => void showView(state.view));
+  dom.refresh.addEventListener('click', () => {
+    void rescan().then(() => {
+      renderNav();
+      renderCurrentView();
+    });
+  });
 
   dom.preset.addEventListener('change', () => {
     const key = dom.preset.value;
@@ -538,20 +643,33 @@ function wireEvents(): void {
     dom.log.hidden = !open;
     dom.logToggle.setAttribute('aria-expanded', String(open));
   });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'f' && (event.ctrlKey || event.metaKey) && !dom.search.disabled) {
+      event.preventDefault();
+      dom.search.focus();
+      dom.search.select();
+    }
+    if (event.key === 'Escape' && document.activeElement === dom.search) {
+      dom.search.value = '';
+      state.search = '';
+      if (isCategory(state.view)) renderCategory();
+    }
+  });
 }
 
 function renderHeader(): void {
   const info = state.info;
   dom.subtitle.textContent = info.is_windows11 ? 'Windows 11 optimization' : 'Windows optimization';
-  dom.host.textContent = `${info.os_name} ${info.display_version} · ${info.cpu} · ${info.memory_gb} GB RAM`;
+  dom.host.textContent = `${info.os_name} ${info.display_version} · ${info.cpu} · ${info.memory_gb} GB`;
 
   const badge = document.createElement('span');
   if (info.is_admin) {
     badge.className = 'badge ok';
-    badge.textContent = 'ADMINISTRATOR';
+    badge.textContent = 'Administrator';
   } else {
     badge.className = 'badge warn';
-    badge.textContent = 'NOT ELEVATED — CLICK TO RESTART AS ADMIN';
+    badge.textContent = 'Not elevated — click to restart as admin';
     badge.title = 'Most tweaks change machine-wide settings and need administrator rights.';
     badge.addEventListener('click', () => {
       void api.relaunchElevated().catch((error) => {
@@ -574,17 +692,25 @@ async function main(): Promise<void> {
     statuses: new Map(),
     selected: new Set(),
     search: '',
+    filter: 'all',
   };
 
   renderHeader();
-
-  dom.preset.replaceChildren(new Option('Preset…', ''), ...catalog.presets.map((preset) => {
-    const option = new Option(`${preset.name} (${preset.tweaks.length})`, preset.key);
-    option.title = preset.description;
-    return option;
-  }));
-
+  dom.preset.replaceChildren(
+    new Option('Preset…', ''),
+    ...catalog.presets.map((preset) => {
+      const option = new Option(`${preset.name} (${preset.tweaks.length})`, preset.key);
+      option.title = preset.description;
+      return option;
+    }),
+  );
   wireEvents();
+
+  // The package and task snapshots are the slow part; build them once, up
+  // front, so the first scan and every later one are cheap.
+  await busy('Reading installed apps and scheduled tasks...', api.warmInventory);
+  await rescan();
+
   await showView(OVERVIEW);
 
   if (!info.is_admin) {
@@ -596,8 +722,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  document.body.innerHTML =
-    `<div class="overlay"><p>SigmaTweaks could not start</p><small>${
-      escapeHtml(api.describeError(error))
-    }</small></div>`;
+  document.body.innerHTML = `<div class="overlay"><p>SigmaTweaks could not start</p><small>${escapeHtml(
+    api.describeError(error),
+  )}</small></div>`;
 });

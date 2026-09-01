@@ -54,7 +54,14 @@ pub const PACKAGES: &[&str] = &[
     "Microsoft.WindowsStore",
     "Microsoft.WindowsTerminal",
     "Microsoft.WindowsAppRuntime",
-    "MicrosoftWindows.Client",
+    // Named individually rather than as a "MicrosoftWindows.Client" prefix:
+    // the shell components below are load-bearing, but the Widgets board ships
+    // under the same prefix as Client.WebExperience and is safe to remove.
+    "MicrosoftWindows.Client.CBS",
+    "MicrosoftWindows.Client.Core",
+    "MicrosoftWindows.Client.FileExp",
+    "MicrosoftWindows.Client.OOBE",
+    "MicrosoftWindows.Client.Photon",
     "Microsoft.AAD.BrokerPlugin",
     "Microsoft.AccountsControl",
     "Microsoft.Windows.ShellExperienceHost",

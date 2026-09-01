@@ -535,7 +535,10 @@
         "name": "SearchboxTaskbarMode",
         "value_type": "dword",
         "value": 1,
-        "default": 2
+        "default": 2,
+        "accepts": [
+          0
+        ]
       }
     ]
   },
@@ -821,7 +824,10 @@
         "name": "SystemResponsiveness",
         "value_type": "dword",
         "value": 10,
-        "default": 20
+        "default": 20,
+        "accepts": [
+          0
+        ]
       },
       {
         "kind": "registry",
@@ -845,7 +851,10 @@
         "name": "Priority",
         "value_type": "dword",
         "value": 6,
-        "default": 2
+        "default": 2,
+        "accepts": [
+          8
+        ]
       },
       {
         "kind": "registry",
@@ -1075,7 +1084,13 @@
         "name": "MenuShowDelay",
         "value_type": "string",
         "value": "0",
-        "default": "400"
+        "default": "400",
+        "accepts": [
+          "1",
+          "10",
+          "20",
+          "100"
+        ]
       }
     ]
   },
@@ -1113,7 +1128,14 @@
         "name": "Win32PrioritySeparation",
         "value_type": "dword",
         "value": 38,
-        "default": 2
+        "default": 2,
+        "accepts": [
+          36,
+          37,
+          40,
+          41,
+          42
+        ]
       }
     ]
   },
@@ -1198,7 +1220,13 @@
         "name": "WaitToKillServiceTimeout",
         "value_type": "string",
         "value": "3000",
-        "default": "5000"
+        "default": "5000",
+        "accepts": [
+          "1000",
+          "2000",
+          "2500",
+          "4000"
+        ]
       }
     ]
   },
@@ -1361,7 +1389,10 @@
         "name": "AllowTelemetry",
         "value_type": "dword",
         "value": 0,
-        "default": null
+        "default": null,
+        "accepts": [
+          1
+        ]
       },
       {
         "kind": "registry",
@@ -1369,7 +1400,10 @@
         "name": "AllowTelemetry",
         "value_type": "dword",
         "value": 0,
-        "default": null
+        "default": null,
+        "accepts": [
+          1
+        ]
       },
       {
         "kind": "registry",
@@ -2093,7 +2127,10 @@
         "name": "DoSvc",
         "startup": "manual",
         "default": "automatic",
-        "stop": true
+        "stop": true,
+        "accepts": [
+          "disabled"
+        ]
       }
     ]
   },
@@ -2187,7 +2224,10 @@
         "name": "DODownloadMode",
         "value_type": "dword",
         "value": 0,
-        "default": null
+        "default": null,
+        "accepts": [
+          99
+        ]
       }
     ]
   },
@@ -2232,5 +2272,503 @@
         "default": null
       }
     ]
+  },
+  {
+    "id": "gaming.timerresolution",
+    "name": "Honour high-resolution timer requests",
+    "category": "Gaming",
+    "description": "Windows 11 changed timer resolution to be per-process, so a game asking for a 1 ms timer no longer gets one while anything else is running. This restores the old system-wide behaviour, which is the single most common cause of frame-pacing stutter that benchmarks do not show. Costs a little idle power.",
+    "risk": "medium",
+    "requires_restart": true,
+    "requires": {
+      "windows11": true,
+      "min_build": 22000
+    },
+    "actions": [
+      {
+        "kind": "registry",
+        "path": "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\kernel",
+        "name": "GlobalTimerResolutionRequests",
+        "value_type": "dword",
+        "value": 1,
+        "default": null
+      }
+    ],
+    "recommended": false
+  },
+  {
+    "id": "gaming.windowedoptimizations",
+    "name": "Enable optimizations for windowed games",
+    "category": "Gaming",
+    "description": "Turns on the flip-model presentation path and variable refresh rate support for borderless-windowed games. This is the setting that gets windowed mode close to exclusive fullscreen latency, and it is off by default on plenty of installs.",
+    "risk": "low",
+    "recommended": true,
+    "requires_admin": false,
+    "requires": {
+      "windows11": true,
+      "min_build": 22621
+    },
+    "actions": [
+      {
+        "kind": "registry",
+        "path": "HKCU:\\Software\\Microsoft\\DirectX\\UserGpuPreferences",
+        "name": "DirectXUserGlobalSettings",
+        "value_type": "string",
+        "value": "SwapEffectUpgradeEnable=1;VRROptimizeEnable=1;",
+        "default": null,
+        "accepts": [
+          "SwapEffectUpgradeEnable=1;",
+          "VRROptimizeEnable=1;SwapEffectUpgradeEnable=1;"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "gaming.memoryintegrity",
+    "name": "Disable memory integrity (HVCI)",
+    "category": "Gaming",
+    "description": "Hypervisor-enforced code integrity costs roughly 5-10% of your frame rate because every driver call goes through the hypervisor. Turning it off is the largest single gaming gain available on Windows 11 - and it is a real security downgrade: it is the mitigation that stops a vulnerable signed driver being used to load unsigned kernel code. Microsoft leaves it off on most upgrade installs, so this returns the machine to that state rather than below it. Deliberately in no preset.",
+    "risk": "high",
+    "requires_restart": true,
+    "actions": [
+      {
+        "kind": "registry",
+        "path": "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\\Scenarios\\HypervisorEnforcedCodeIntegrity",
+        "name": "Enabled",
+        "value_type": "dword",
+        "value": 0,
+        "default": 1
+      }
+    ],
+    "recommended": false
+  },
+  {
+    "id": "prod.clipboardhistory",
+    "name": "Enable clipboard history (Win+V)",
+    "category": "Productivity",
+    "description": "Keeps the last 25 things you copied and puts them behind Win+V. Off by default, and the single most useful thing on this page for most people. History stays local unless you separately turn on sync.",
+    "risk": "low",
+    "recommended": true,
+    "requires_admin": false,
+    "actions": [
+      {
+        "kind": "registry",
+        "path": "HKCU:\\Software\\Microsoft\\Clipboard",
+        "name": "EnableClipboardHistory",
+        "value_type": "dword",
+        "value": 1,
+        "default": 0
+      }
+    ]
+  },
+  {
+    "id": "prod.stickykeys",
+    "name": "Stop the Sticky Keys and Filter Keys prompts",
+    "category": "Productivity",
+    "description": "Disables the shortcuts that pop a dialog when Shift is pressed five times or held down. The accessibility features stay available in Settings; only the accidental trigger goes away.",
+    "risk": "low",
+    "recommended": true,
+    "requires_admin": false,
+    "actions": [
+      {
+        "kind": "registry",
+        "path": "HKCU:\\Control Panel\\Accessibility\\StickyKeys",
+        "name": "Flags",
+        "value_type": "string",
+        "value": "506",
+        "default": "510"
+      },
+      {
+        "kind": "registry",
+        "path": "HKCU:\\Control Panel\\Accessibility\\ToggleKeys",
+        "name": "Flags",
+        "value_type": "string",
+        "value": "58",
+        "default": "62"
+      },
+      {
+        "kind": "registry",
+        "path": "HKCU:\\Control Panel\\Accessibility\\Keyboard Response",
+        "name": "Flags",
+        "value_type": "string",
+        "value": "122",
+        "default": "126"
+      }
+    ]
+  },
+  {
+    "id": "prod.keyboardrepeat",
+    "name": "Speed up key repeat",
+    "category": "Productivity",
+    "description": "Cuts the delay before a held key starts repeating to its shortest setting. Noticeable every time you hold an arrow key.",
+    "risk": "low",
+    "requires_admin": false,
+    "requires_restart": true,
+    "actions": [
+      {
+        "kind": "registry",
+        "path": "HKCU:\\Control Panel\\Keyboard",
+        "name": "KeyboardDelay",
+        "value_type": "string",
+        "value": "0",
+        "default": "1"
+      }
+    ],
+    "recommended": false
+  },
+  {
+    "id": "prod.longpaths",
+    "name": "Enable long file paths",
+    "category": "Productivity",
+    "description": "Lifts the 260-character path limit for applications that opt in. Fixes the node_modules and deep-build-tree failures that otherwise have no good workaround.",
+    "risk": "low",
+    "recommended": true,
+    "requires_restart": true,
+    "actions": [
+      {
+        "kind": "registry",
+        "path": "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\FileSystem",
+        "name": "LongPathsEnabled",
+        "value_type": "dword",
+        "value": 1,
+        "default": 0
+      }
+    ]
+  },
+  {
+    "id": "prod.developermode",
+    "name": "Allow symlinks without administrator rights",
+    "category": "Productivity",
+    "description": "Turns on the developer-mode flag that lets an ordinary account create symbolic links. Git, package managers and build tools stop needing an elevated shell for it.",
+    "risk": "low",
+    "actions": [
+      {
+        "kind": "registry",
+        "path": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModelUnlock",
+        "name": "AllowDevelopmentWithoutDevLicense",
+        "value_type": "dword",
+        "value": 1,
+        "default": 0
+      }
+    ],
+    "recommended": false
+  },
+  {
+    "id": "prod.alttabwindows",
+    "name": "Alt+Tab shows windows, not browser tabs",
+    "category": "Productivity",
+    "description": "Stops Edge tabs being mixed into the Alt+Tab list, so switching windows stays predictable no matter how many tabs are open.",
+    "risk": "low",
+    "recommended": true,
+    "requires_admin": false,
+    "requires": {
+      "windows11": true
+    },
+    "actions": [
+      {
+        "kind": "registry",
+        "path": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+        "name": "MultiTaskingAltTabFilter",
+        "value_type": "dword",
+        "value": 3,
+        "default": 0
+      }
+    ]
+  },
+  {
+    "id": "prod.taskbarnevercombine",
+    "name": "Never combine taskbar buttons",
+    "category": "Productivity",
+    "description": "Gives every window its own labelled taskbar button instead of stacking them behind one icon. Costs taskbar space and saves a hover-and-pick on every switch.",
+    "risk": "low",
+    "requires_admin": false,
+    "restart_explorer": true,
+    "requires": {
+      "windows11": true,
+      "min_build": 22621
+    },
+    "actions": [
+      {
+        "kind": "registry",
+        "path": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+        "name": "TaskbarGlomLevel",
+        "value_type": "dword",
+        "value": 2,
+        "default": 0
+      }
+    ],
+    "recommended": false
+  },
+  {
+    "id": "prod.clockseconds",
+    "name": "Show seconds on the taskbar clock",
+    "category": "Productivity",
+    "description": "Adds seconds to the system tray clock.",
+    "risk": "low",
+    "requires_admin": false,
+    "restart_explorer": true,
+    "requires": {
+      "windows11": true,
+      "min_build": 22621
+    },
+    "actions": [
+      {
+        "kind": "registry",
+        "path": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+        "name": "ShowSecondsInSystemClock",
+        "value_type": "dword",
+        "value": 1,
+        "default": 0
+      }
+    ],
+    "recommended": false
+  },
+  {
+    "id": "prod.fullpathtitle",
+    "name": "Show the full path in the Explorer title bar",
+    "category": "Productivity",
+    "description": "Puts the complete folder path in the window title, which makes screenshots and alt-tabbing between similar folders far less ambiguous.",
+    "risk": "low",
+    "requires_admin": false,
+    "restart_explorer": true,
+    "actions": [
+      {
+        "kind": "registry",
+        "path": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\CabinetState",
+        "name": "FullPath",
+        "value_type": "dword",
+        "value": 1,
+        "default": 0
+      }
+    ],
+    "recommended": false
+  },
+  {
+    "id": "prod.suggestednotifications",
+    "name": "Silence Windows' own suggestion notifications",
+    "category": "Productivity",
+    "description": "Stops the toasts that suggest finishing setup, trying Edge or signing into a Microsoft account. Notifications from your actual applications are untouched.",
+    "risk": "low",
+    "recommended": true,
+    "requires_admin": false,
+    "actions": [
+      {
+        "kind": "registry",
+        "path": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings\\Windows.SystemToast.Suggested",
+        "name": "Enabled",
+        "value_type": "dword",
+        "value": 0,
+        "default": 1
+      },
+      {
+        "kind": "registry",
+        "path": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings\\Windows.ActionCenter.SmartOptOut",
+        "name": "Enabled",
+        "value_type": "dword",
+        "value": 0,
+        "default": 1
+      }
+    ]
+  },
+  {
+    "id": "debloat.outlookforwindows",
+    "name": "Remove the new Outlook",
+    "category": "Debloat",
+    "description": "Removes the web-wrapper Outlook that Windows installs alongside Mail. The classic desktop Outlook from Office is a separate program and is not affected.",
+    "risk": "low",
+    "irreversible": true,
+    "actions": [
+      {
+        "kind": "appx",
+        "package": "Microsoft.OutlookForWindows"
+      }
+    ],
+    "recommended": true
+  },
+  {
+    "id": "debloat.devhome",
+    "name": "Remove Dev Home",
+    "category": "Debloat",
+    "description": "Removes the developer dashboard app Windows installs whether or not you develop anything.",
+    "risk": "low",
+    "irreversible": true,
+    "actions": [
+      {
+        "kind": "appx",
+        "package": "Microsoft.Windows.DevHome"
+      }
+    ],
+    "recommended": true
+  },
+  {
+    "id": "debloat.crossdevice",
+    "name": "Remove Mobile devices / Cross Device",
+    "category": "Debloat",
+    "description": "Removes the component behind the 'Mobile devices' panel that pairs a phone to the PC.",
+    "risk": "low",
+    "irreversible": true,
+    "actions": [
+      {
+        "kind": "appx",
+        "package": "MicrosoftWindows.CrossDevice"
+      }
+    ],
+    "recommended": false
+  },
+  {
+    "id": "debloat.family",
+    "name": "Remove Family Safety",
+    "category": "Debloat",
+    "description": "Removes the parental-controls app. Do not use this on a machine where a child account has screen-time limits.",
+    "risk": "medium",
+    "irreversible": true,
+    "actions": [
+      {
+        "kind": "appx",
+        "package": "MicrosoftCorporationII.MicrosoftFamily"
+      }
+    ],
+    "recommended": false
+  },
+  {
+    "id": "debloat.cortanaapp",
+    "name": "Remove the Cortana app",
+    "category": "Debloat",
+    "description": "Removes the standalone Cortana app. Pair it with the Cortana policy under Privacy so it does not return.",
+    "risk": "low",
+    "irreversible": true,
+    "actions": [
+      {
+        "kind": "appx",
+        "package": "Microsoft.549981C3F5F10"
+      }
+    ],
+    "recommended": true
+  },
+  {
+    "id": "debloat.alarmsrecorder",
+    "name": "Remove Alarms & Clock and Sound Recorder",
+    "category": "Debloat",
+    "description": "Removes two small bundled utilities.",
+    "risk": "low",
+    "irreversible": true,
+    "actions": [
+      {
+        "kind": "appx",
+        "package": "Microsoft.WindowsAlarms"
+      },
+      {
+        "kind": "appx",
+        "package": "Microsoft.WindowsSoundRecorder"
+      }
+    ],
+    "recommended": false
+  },
+  {
+    "id": "debloat.gamingapp",
+    "name": "Remove the Xbox / Game Pass app",
+    "category": "Debloat",
+    "description": "Removes the Xbox app used to install and launch Game Pass titles. Only pick this if you do not use Game Pass on this machine.",
+    "risk": "medium",
+    "irreversible": true,
+    "actions": [
+      {
+        "kind": "appx",
+        "package": "Microsoft.GamingApp"
+      }
+    ],
+    "recommended": false
+  },
+  {
+    "id": "debloat.bingsearch",
+    "name": "Remove the Bing search component",
+    "category": "Debloat",
+    "description": "Removes the package that puts web results in the Start menu. Local search keeps working; this is the app-level counterpart to the web-search policy under Privacy.",
+    "risk": "medium",
+    "irreversible": true,
+    "actions": [
+      {
+        "kind": "appx",
+        "package": "Microsoft.BingSearch"
+      }
+    ],
+    "recommended": false
+  },
+  {
+    "id": "debloat.widgetsapp",
+    "name": "Remove the Widgets app",
+    "category": "Debloat",
+    "description": "Removes the Web Experience package behind the Widgets board and its background feed process. Pair it with the taskbar tweak under Explorer.",
+    "risk": "low",
+    "irreversible": true,
+    "actions": [
+      {
+        "kind": "appx",
+        "package": "MicrosoftWindows.Client.WebExperience"
+      }
+    ],
+    "recommended": true,
+    "requires": {
+      "windows11": true
+    }
+  },
+  {
+    "id": "debloat.oemstubs",
+    "name": "Remove partner and promo stubs",
+    "category": "Debloat",
+    "description": "Removes the pre-installed promotional entries OEMs and Windows itself seed the Start menu with - Spotify, Prime Video, TikTok, Netflix, Disney+, LinkedIn, the casual games and similar. Only ones that are actually present are touched.",
+    "risk": "low",
+    "irreversible": true,
+    "actions": [
+      {
+        "kind": "appx",
+        "package": "SpotifyAB.SpotifyMusic"
+      },
+      {
+        "kind": "appx",
+        "package": "AmazonVideo.PrimeVideo"
+      },
+      {
+        "kind": "appx",
+        "package": "BytedancePte.Ltd.TikTok"
+      },
+      {
+        "kind": "appx",
+        "package": "Netflix.Netflix"
+      },
+      {
+        "kind": "appx",
+        "package": "Disney.37853FC22B2CE"
+      },
+      {
+        "kind": "appx",
+        "package": "7EE7776C.LinkedInforWindows"
+      },
+      {
+        "kind": "appx",
+        "package": "king.com.*"
+      },
+      {
+        "kind": "appx",
+        "package": "Facebook.*"
+      },
+      {
+        "kind": "appx",
+        "package": "ClearChannelRadioDigital.iHeartRadio"
+      },
+      {
+        "kind": "appx",
+        "package": "Duolingo.*"
+      },
+      {
+        "kind": "appx",
+        "package": "*.Twitter"
+      },
+      {
+        "kind": "appx",
+        "package": "AdobeSystemsIncorporated.AdobeExpress"
+      }
+    ],
+    "recommended": true
   }
 ]

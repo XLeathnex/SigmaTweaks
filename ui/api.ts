@@ -17,6 +17,9 @@ export const getSystemInfo = () => invoke<SystemInfo>('get_system_info');
 
 export const getCatalog = () => invoke<CatalogPayload>('get_catalog');
 
+/** Builds the package and scheduled-task snapshots before the first scan. */
+export const warmInventory = () => invoke<void>('warm_inventory');
+
 /** State for the given ids, or the whole catalog when omitted. */
 export const getStates = (ids?: string[]) =>
   invoke<TweakStatus[]>('get_states', { ids: ids ?? null });

@@ -5,80 +5,134 @@
 //! readings of the same data.
 
 use crate::appx;
+use crate::codec;
 use crate::custom;
 use crate::error::Result;
-use crate::model::{Action, Mode, State, Tweak, TweakResult};
+use crate::inventory;
+use crate::model::{Action, Mode, RegValue, State, Tweak, TweakResult, TweakStatus};
 use crate::process;
 use crate::registry;
 use crate::services;
+
+/// Whether the live registry value counts as applied.
+///
+/// A value matches if it is the one this tweak writes, or any of the extra
+/// values the catalog accepts. That second list is what lets detection
+/// recognise the same change made by another tool, or through the Windows UI,
+/// which routinely lands on a different number with the same effect.
+fn registry_applied(
+    path: &str,
+    name: &str,
+    value: Option<&RegValue>,
+    accepts: &[RegValue],
+) -> bool {
+    if registry::matches(path, name, value) {
+        return true;
+    }
+
+    // "Should not exist" has no equivalent spellings to consider.
+    if value.is_none() {
+        return false;
+    }
+
+    let Ok(Some(current)) = registry::read(path, name) else {
+        return false;
+    };
+    accepts
+        .iter()
+        .any(|candidate| codec::equivalent(&current, candidate))
+}
 
 /// The state of one action: `None` means "not applicable here", which is not
 /// the same as "off" and must not drag the whole tweak down to Partial.
 fn action_state(action: &Action) -> Option<State> {
     match action {
         Action::Registry {
-            path, name, value, ..
-        } => Some(if registry::matches(path, name, value.as_ref()) {
+            path,
+            name,
+            value,
+            accepts,
+            ..
+        } => Some(if registry_applied(path, name, value.as_ref(), accepts) {
             State::Applied
         } else {
             State::NotApplied
         }),
-        Action::Service { name, startup, .. } => {
+        Action::Service {
+            name,
+            startup,
+            accepts,
+            ..
+        } => {
             // A service this edition never shipped cannot be off-target.
             if !services::exists(name) {
                 return None;
             }
             Some(match services::startup_type(name) {
-                Some(current) if current == *startup => State::Applied,
+                Some(current) if current == *startup || accepts.contains(&current) => {
+                    State::Applied
+                }
                 Some(_) => State::NotApplied,
                 None => State::Unknown,
             })
         }
-        Action::ScheduledTask { path, name } => services::task_enabled(path, name).map(|enabled| {
-            if enabled {
-                State::NotApplied
-            } else {
-                State::Applied
-            }
+        // These two read the cached inventory rather than launching a process
+        // per item, which is what makes scanning the whole catalog affordable.
+        Action::ScheduledTask { path, name } => {
+            inventory::task_enabled(path, name).map(|enabled| {
+                if enabled {
+                    State::NotApplied
+                } else {
+                    State::Applied
+                }
+            })
+        }
+        Action::Appx { package } => Some(if inventory::package_present(package) {
+            State::NotApplied
+        } else {
+            State::Applied
         }),
-        Action::Appx { package } => match appx::state(package) {
-            Ok((installed, provisioned)) => Some(if installed || provisioned {
-                State::NotApplied
-            } else {
-                State::Applied
-            }),
-            Err(_) => Some(State::Unknown),
-        },
         Action::Custom { op } => Some(custom::state(*op)),
     }
 }
 
-/// Whether a tweak is currently in effect.
-pub fn state(tweak: &Tweak) -> State {
+/// Whether a tweak is currently in effect, and how much of it is.
+///
+/// The counts are what let the interface say "3 of 4 already set" instead of
+/// an unexplained Partial, which matters most on a machine that was tweaked
+/// by hand or by another tool before this app arrived.
+pub fn inspect(tweak: &Tweak) -> TweakStatus {
     let states: Vec<State> = tweak.actions.iter().filter_map(action_state).collect();
-
-    if states.is_empty() {
-        return State::Unknown;
-    }
-
-    // A custom op that reports Partial has already done the aggregating for
-    // its own interfaces, and that answer wins.
-    if states.contains(&State::Partial) {
-        return State::Partial;
-    }
 
     let applied = states.iter().filter(|s| **s == State::Applied).count();
     let known = states.iter().filter(|s| **s != State::Unknown).count();
 
-    if known == 0 {
+    let state = if states.is_empty() || known == 0 {
         State::Unknown
+    } else if states.contains(&State::Partial) {
+        // A custom op that reports Partial has already aggregated its own
+        // interfaces, and that answer wins over the count.
+        State::Partial
     } else if applied == states.len() {
         State::Applied
     } else if applied == 0 {
         State::NotApplied
     } else {
         State::Partial
+    };
+
+    TweakStatus {
+        id: tweak.id.clone(),
+        state,
+        reason: None,
+        matched: applied as u32,
+        total: states.len() as u32,
     }
+}
+
+/// Whether a tweak is currently in effect.
+pub fn state(tweak: &Tweak) -> State {
+    inspect(tweak).state
 }
 
 fn run_action(action: &Action, mode: Mode) -> Result<()> {
@@ -89,6 +143,7 @@ fn run_action(action: &Action, mode: Mode) -> Result<()> {
             value_type,
             value,
             default,
+            ..
         } => {
             let wanted = match mode {
                 Mode::Apply => value,
@@ -105,6 +160,7 @@ fn run_action(action: &Action, mode: Mode) -> Result<()> {
             startup,
             default,
             stop,
+            ..
         } => {
             let wanted = match mode {
                 Mode::Apply => *startup,
@@ -121,10 +177,16 @@ fn run_action(action: &Action, mode: Mode) -> Result<()> {
             Ok(())
         }
         Action::ScheduledTask { path, name } => {
-            services::set_task_enabled(path, name, mode == Mode::Revert)
+            let outcome = services::set_task_enabled(path, name, mode == Mode::Revert);
+            inventory::invalidate();
+            outcome
         }
         Action::Appx { package } => match mode {
-            Mode::Apply => appx::remove(package),
+            Mode::Apply => {
+                let outcome = appx::remove(package);
+                inventory::invalidate();
+                outcome
+            }
             // Guarded by `irreversible` before we ever get here.
             Mode::Revert => Err(crate::error::Error::new(format!(
                 "{package} can only be reinstalled from the Microsoft Store"

@@ -17,7 +17,14 @@
       "debloat.mixedreality",
       "debloat.skype",
       "debloat.powerautomate",
-      "debloat.todos"
+      "debloat.todos",
+      "debloat.outlookforwindows",
+      "debloat.devhome",
+      "debloat.cortanaapp",
+      "debloat.widgetsapp",
+      "debloat.oemstubs",
+      "debloat.alarmsrecorder",
+      "debloat.crossdevice"
     ]
   },
   {
@@ -45,7 +52,40 @@
       "privacy.suggestions",
       "explorer.widgets",
       "update.noautoreboot",
-      "update.nodrivers"
+      "update.nodrivers",
+      "gaming.timerresolution",
+      "gaming.windowedoptimizations",
+      "prod.stickykeys"
+    ]
+  },
+  {
+    "key": "productivity",
+    "name": "Productivity",
+    "description": "Everything that removes friction from daily use: clipboard history, long paths, a predictable Alt+Tab, no accidental Sticky Keys, no suggestion toasts, and an Explorer that tells you where you are.",
+    "tweaks": [
+      "prod.clipboardhistory",
+      "prod.stickykeys",
+      "prod.keyboardrepeat",
+      "prod.longpaths",
+      "prod.developermode",
+      "prod.alttabwindows",
+      "prod.fullpathtitle",
+      "prod.suggestednotifications",
+      "prod.clockseconds",
+      "explorer.fileextensions",
+      "explorer.hiddenfiles",
+      "explorer.launchtothispc",
+      "explorer.compactmode",
+      "explorer.classiccontextmenu",
+      "explorer.endtask",
+      "explorer.shortcutsuffix",
+      "explorer.verbosestatus",
+      "perf.menudelay",
+      "perf.startupdelay",
+      "privacy.websearch",
+      "privacy.suggestions",
+      "explorer.widgets",
+      "explorer.chat"
     ]
   },
   {
@@ -82,7 +122,11 @@
       "svc.deliveryoptimization",
       "update.noautoreboot",
       "update.nodrivers",
-      "update.deliveryoptimization"
+      "update.deliveryoptimization",
+      "prod.clipboardhistory",
+      "prod.stickykeys",
+      "prod.alttabwindows",
+      "prod.suggestednotifications"
     ]
   },
   {
@@ -120,7 +164,9 @@
       "power.ultimateperformance",
       "update.noautoreboot",
       "update.nodrivers",
-      "update.deliveryoptimization"
+      "update.deliveryoptimization",
+      "prod.stickykeys",
+      "gaming.windowedoptimizations"
     ]
   },
   {
@@ -190,7 +236,13 @@
       "svc.deliveryoptimization",
       "update.noautoreboot",
       "update.nodrivers",
-      "update.deliveryoptimization"
+      "update.deliveryoptimization",
+      "prod.clipboardhistory",
+      "prod.stickykeys",
+      "prod.longpaths",
+      "prod.alttabwindows",
+      "prod.suggestednotifications",
+      "gaming.windowedoptimizations"
     ]
   }
 ]

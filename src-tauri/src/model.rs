@@ -115,6 +115,16 @@ pub enum Action {
         value: Option<RegValue>,
         /// The stock Windows value, written when reverting. `None` deletes it.
         default: Option<RegValue>,
+        /// Extra values that also count as "already applied".
+        ///
+        /// Detection has to recognise work someone else did. Other tools, and
+        /// the Windows UI itself, often reach the same end state through a
+        /// different number: `Win32PrioritySeparation` is 0x26 here but 0x28
+        /// and 0x2A are equally short-quantum, and telemetry set to Basic
+        /// through Settings lands on 1 where the policy writes 0. Anything
+        /// listed here reads as applied but is never written.
+        #[serde(default)]
+        accepts: Vec<RegValue>,
     },
     Service {
         name: String,
@@ -122,6 +132,12 @@ pub enum Action {
         default: StartupType,
         #[serde(default)]
         stop: bool,
+        /// Startup types that also count as "already applied", for the same
+        /// reason as `accepts` above: a service someone already set to Manual
+        /// when this tweak wants Disabled is most of the way there, and
+        /// reporting it as untouched would be wrong.
+        #[serde(default)]
+        accepts: Vec<StartupType>,
     },
     ScheduledTask {
         path: String,
@@ -227,7 +243,7 @@ pub struct MaintenanceAction {
     pub confirm: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TweakResult {
     pub id: String,
     pub name: String,
@@ -241,4 +257,9 @@ pub struct TweakStatus {
     pub state: State,
     /// Why the tweak is `NotApplicable`, shown under its name.
     pub reason: Option<String>,
+    /// How many of this tweak's checkable changes are already in place, and
+    /// how many there are. The UI turns this into "3 of 4 already set", which
+    /// is the difference between a useful Partial and a mystifying one.
+    pub matched: u32,
+    pub total: u32,
 }
