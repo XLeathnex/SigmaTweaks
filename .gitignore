@@ -1,0 +1,14 @@
+# SigmaTweaks writes logs, backups and exported profiles to
+# %LOCALAPPDATA%\SigmaTweaks, but keep these patterns in case anything is
+# generated inside the working copy.
+*.log
+backups/
+profiles/
+*.user.json
+
+# Editors and OS clutter
+.vs/
+.vscode/
+*.suo
+Thumbs.db
+desktop.ini

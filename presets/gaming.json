@@ -1,0 +1,27 @@
+{
+  "Name": "Gaming",
+  "Description": "Latency and frame-time work: scheduler priorities, capture off, mouse acceleration off, Nagle off, and a power plan that stops parking cores. Expect higher idle power draw.",
+  "Tweaks": [
+    "gaming.gamemode",
+    "gaming.gamedvr",
+    "gaming.gamebarpopup",
+    "gaming.fullscreenoptimizations",
+    "gaming.hags",
+    "gaming.mmcss",
+    "gaming.mouseaccel",
+    "perf.visualfx",
+    "perf.transparency",
+    "perf.priorityseparation",
+    "perf.backgroundapps",
+    "perf.powerthrottling",
+    "net.nagle",
+    "power.ultimateperformance",
+    "power.usbselectivesuspend",
+    "power.neversleepac",
+    "privacy.telemetry",
+    "privacy.suggestions",
+    "explorer.widgets",
+    "update.noautoreboot",
+    "update.nodrivers"
+  ]
+}
